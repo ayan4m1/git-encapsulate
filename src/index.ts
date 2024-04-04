@@ -1,33 +1,24 @@
 import { program } from 'commander';
 
-import { cloneSparse, getPackageVersion } from './utils.js';
+import { encapsulate, getPackageVersion } from './utils.js';
 
 try {
   const description =
-    'Performs a "sparse" (i.e. partial) clone of a Git repository.';
+    'Archives all Git repositories from the base folder to the output folder.';
   const version = await getPackageVersion();
-  const handler = (cwd: string, repoUrl: string, paths: string[]) => {
-    const { globs, force } = program.opts();
-
-    cloneSparse(cwd, repoUrl, paths, {
-      force,
-      globs
-    });
-  };
+  // const handler = (basePath: string) => {
+  //   encapsulate(basePath);
+  // };
 
   await program
     .version(version)
     .description(description)
-    .argument('<working-copy>', 'Local Git working copy location')
-    .argument('<repo-url>', 'Git repository clone URL')
-    .argument('<paths...>', 'One or more paths to include in checkout')
+    .argument('<base-path>', 'Root of your Git repositories')
+    .argument('[output-path]', 'Directory to place output in, defaults to cwd')
     .option('-f, --force', 'Force overwriting existing working copy')
-    .option('-g, --globs', 'Allow use of glob patterns in <paths...> argument')
-    .action(handler)
+    .action(encapsulate)
     .parseAsync();
 } catch (error) {
   console.error(error);
   process.exit(1);
 }
-
-export default cloneSparse;

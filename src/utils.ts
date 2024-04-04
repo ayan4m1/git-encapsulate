@@ -2,14 +2,13 @@ import { existsSync } from 'fs';
 import { promisify } from 'util';
 import { fileURLToPath } from 'url';
 import { coerce, satisfies } from 'semver';
-import { mkdir, readFile, rm } from 'fs/promises';
-import { basename, dirname, resolve } from 'path';
+import { lstat, mkdir, readFile, readdir } from 'fs/promises';
+import { basename, dirname, join, resolve } from 'path';
 import { exec as rawExec, spawn } from 'child_process';
 
 export type ExecuteResults = [string, string];
 
 export type CloneSparseOptions = {
-  globs: boolean;
   force: boolean;
 };
 
@@ -30,7 +29,7 @@ const isGitInstallValid = async (): Promise<boolean> => {
       return false;
     }
 
-    return satisfies(gitVersion, '>=2.25.0');
+    return satisfies(gitVersion, '>=2.x');
   } catch {
     return false;
   }
@@ -69,76 +68,56 @@ const executeGitCommand = (cwd: string, args: string[] = []): Promise<void> =>
 export const getPackageVersion = async (): Promise<string> =>
   JSON.parse(await readFile(getPackageJsonPath(), 'utf-8'))?.version;
 
-export async function cloneSparse(
-  cwd: string,
-  repoUrl: string,
-  paths: string[],
-  opts?: CloneSparseOptions
+export async function encapsulate(
+  basePath: string,
+  outputPath: string = process.cwd()
 ): Promise<void> {
   try {
-    if (!repoUrl || !cwd || !paths.length) {
+    if (!basePath) {
       throw new Error('Invalid arguments supplied!');
     }
 
+    if (!existsSync(basePath)) {
+      throw new Error(`${basePath} does not exist!`);
+    }
+
+    if (!existsSync(outputPath)) {
+      await mkdir(outputPath, {
+        recursive: true
+      });
+    }
+
     if (!isGitInstallValid()) {
-      throw new Error('Git >= 2.25.0 was not found!');
+      throw new Error('Git >= 2.x was not found!');
     }
 
-    if (repoUrl.indexOf('://') === 1) {
-      const protocol = repoUrl.includes('@') ? 'ssh' : 'https';
+    const files = [];
+    const repositories = [];
 
-      repoUrl = `git+${protocol}://${repoUrl}`;
-    }
+    for (const entry of await readdir(basePath)) {
+      const path = join(basePath, entry);
+      const stats = await lstat(path);
 
-    const workingCopyParent = basename(dirname(cwd));
-    if (!existsSync(workingCopyParent)) {
-      console.log(`Creating ${workingCopyParent} to contain repo...`);
-      await mkdir(workingCopyParent, {
-        recursive: true
-      });
-    }
+      if (stats.isDirectory()) {
+        const repoGitDir = join(path, '.git');
+        const repoGitStats = await lstat(repoGitDir);
 
-    const workingCopyDir = basename(cwd);
-    const { globs, force } = opts;
-    if (existsSync(cwd) && force) {
-      console.log('Removing existing working copy...');
-      await rm(workingCopyDir, {
-        force: true,
-        recursive: true
-      });
-    } else if (!force) {
-      throw new Error(`${cwd} already exists, refusing to overwrite it!`);
-    }
-
-    console.log('Pre-flight checks passed, performing bare clone...');
-    await executeGitCommand(workingCopyParent, [
-      'clone',
-      '-n',
-      '--depth',
-      '1',
-      '--filter=tree:0',
-      repoUrl,
-      workingCopyDir
-    ]);
-    console.log('Adding desired paths to sparse-checkout...');
-    paths = paths.map((path) => path.replace(/"/g, '').replace(/^\./, ''));
-    if (!globs) {
-      await executeGitCommand(cwd, [
-        'sparse-checkout',
-        'set',
-        '--no-cone',
-        ...paths
-      ]);
-    } else {
-      await executeGitCommand(cwd, ['sparse-checkout', 'init']);
-      await executeCommand(`echo !/* > .git/info/sparse-checkout`, cwd);
-      for (const path of paths) {
-        await executeCommand(`echo ${path} >> .git/info/sparse-checkout`, cwd);
+        if (repoGitStats.isDirectory()) {
+          repositories.push(path);
+        }
+      } else if (stats.isFile()) {
+        files.push(path);
       }
     }
-    console.log('Performing final checkout...');
-    // todo: add progress bar
-    await executeGitCommand(cwd, ['checkout']);
+
+    for (const repoPath of repositories) {
+      await executeGitCommand(repoPath, [
+        'archive',
+        'HEAD',
+        '--format=tgz',
+        `--output=${join(outputPath, `${basename(repoPath)}.tgz`)}`
+      ]);
+    }
     console.log('Complete!');
   } catch (error) {
     console.error(error);
