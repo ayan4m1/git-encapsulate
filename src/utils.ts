@@ -4,7 +4,6 @@ import { promisify } from 'util';
 import chunk from 'lodash.chunk';
 import ProgressBar from 'progress';
 import { fileURLToPath } from 'url';
-import { program } from 'commander';
 import { coerce, satisfies } from 'semver';
 import { mkdir, readFile } from 'fs/promises';
 import { dirname, resolve, basename, join } from 'path';
@@ -77,7 +76,7 @@ const transformPathToFilename = (
 ) =>
   join(
     outputPath,
-    `${basename(inputPath.replace(`${basePath}/`.replaceAll('/', '\\'), '').replace(/\\/g, '-'))}.tgz`
+    `${basename(inputPath.replace(`${basePath}/`.replaceAll('/', '\\'), '').replace(/\\/g, '_'))}.tgz`
   );
 
 export const getPackageVersion = async (): Promise<string> =>
@@ -85,11 +84,10 @@ export const getPackageVersion = async (): Promise<string> =>
 
 export async function encapsulate(
   basePath: string,
-  outputPath: string = process.cwd()
+  outputPath: string = process.cwd(),
+  opts?: EncapsulateOptions
 ): Promise<void> {
   try {
-    const { threads } = program.opts();
-
     if (!basePath) {
       throw new Error('Invalid arguments supplied!');
     }
@@ -111,7 +109,7 @@ export async function encapsulate(
     const entries = await glob(`${basePath}/**/.git/index`);
     const repositories = entries.map((entry) => resolve(dirname(entry), '..'));
     const progressBar = new ProgressBar(
-      `packing :current/:total repos... [:bar]:percent`,
+      `[:bar]:percent :: packing :current/:total repos`,
       { total: repositories.length, width: 20 }
     );
 
@@ -124,7 +122,7 @@ export async function encapsulate(
           `--output=${transformPathToFilename(repoPath, outputPath, basePath)}`
         ]).then(() => progressBar.tick())
       ),
-      threads
+      opts.threads
     );
 
     for (const batch of batches) {
