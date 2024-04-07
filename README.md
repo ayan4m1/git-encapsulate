@@ -1,6 +1,6 @@
 # git-encapsulate
 
-[![npm version](https://badge.fury.io/js/@ayan4m1%git-encapsulate.svg)](https://badge.fury.io/js/@ayan4m1%git-encapsulate)
+[![npm version](https://badge.fury.io/js/@ayan4m1%2Fgit-encapsulate.svg)](https://badge.fury.io/js/@ayan4m1%2Fgit-encapsulate)
 
 ## features
 
