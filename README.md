@@ -18,4 +18,8 @@
 
 ## usage
 
+Running
+
 > git-encapsulate /path/to/code-root/
+
+Will create a tgz archive for each of the Git repositories in `/path/to/code-root/`.
