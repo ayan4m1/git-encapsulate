@@ -46,7 +46,7 @@
     "build": "rollup -c --configPlugin typescript",
     "develop": "rollup -c -w --configPlugin typescript",
     "lint": "eslint ./src --ext .ts",
-    "prepack": "cross-env NODE_ENV=production rollup -c --configPlugin typescript",
+    "prepublishOnly": "cross-env NODE_ENV=production rollup -c --configPlugin typescript",
     "version": "auto-changelog -p -b 10 -l 10 && git add CHANGELOG.md",
     "prepare": "husky"
   },
