@@ -16,6 +16,7 @@ try {
     .argument('<base-path>', 'Root of your Git repositories')
     .argument('[output-path]', 'Directory to place output in, defaults to cwd')
     .option('-f, --force', 'Force overwriting existing working copy')
+    .option('-t, --threads', 'Number of concurrent threads to use')
     .action(encapsulate)
     .parseAsync();
 } catch (error) {

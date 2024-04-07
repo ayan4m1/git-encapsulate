@@ -1,15 +1,20 @@
+import { glob } from 'glob';
 import { existsSync } from 'fs';
 import { promisify } from 'util';
+import chunk from 'lodash.chunk';
+import ProgressBar from 'progress';
 import { fileURLToPath } from 'url';
+import { program } from 'commander';
 import { coerce, satisfies } from 'semver';
-import { lstat, mkdir, readFile, readdir } from 'fs/promises';
-import { basename, dirname, join, resolve } from 'path';
+import { mkdir, readFile } from 'fs/promises';
+import { dirname, resolve, basename, join } from 'path';
 import { exec as rawExec, spawn } from 'child_process';
 
 export type ExecuteResults = [string, string];
 
-export type CloneSparseOptions = {
-  force: boolean;
+export type EncapsulateOptions = {
+  force?: boolean;
+  threads?: number;
 };
 
 const exec = promisify(rawExec);
@@ -65,6 +70,16 @@ const executeGitCommand = (cwd: string, args: string[] = []): Promise<void> =>
     }
   );
 
+const transformPathToFilename = (
+  inputPath: string,
+  outputPath: string,
+  basePath: string
+) =>
+  join(
+    outputPath,
+    `${basename(inputPath.replace(`${basePath}/`.replaceAll('/', '\\'), '').replace(/\\/g, '-'))}.tgz`
+  );
+
 export const getPackageVersion = async (): Promise<string> =>
   JSON.parse(await readFile(getPackageJsonPath(), 'utf-8'))?.version;
 
@@ -73,6 +88,8 @@ export async function encapsulate(
   outputPath: string = process.cwd()
 ): Promise<void> {
   try {
+    const { threads } = program.opts();
+
     if (!basePath) {
       throw new Error('Invalid arguments supplied!');
     }
@@ -91,33 +108,29 @@ export async function encapsulate(
       throw new Error('Git >= 2.x was not found!');
     }
 
-    const files = [];
-    const repositories = [];
+    const entries = await glob(`${basePath}/**/.git/index`);
+    const repositories = entries.map((entry) => resolve(dirname(entry), '..'));
+    const progressBar = new ProgressBar(
+      `packing :current/:total repos... [:bar]:percent`,
+      { total: repositories.length, width: 20 }
+    );
 
-    for (const entry of await readdir(basePath)) {
-      const path = join(basePath, entry);
-      const stats = await lstat(path);
+    const batches = chunk(
+      repositories.map((repoPath) =>
+        executeGitCommand(repoPath, [
+          'archive',
+          'HEAD',
+          '--format=tgz',
+          `--output=${transformPathToFilename(repoPath, outputPath, basePath)}`
+        ]).then(() => progressBar.tick())
+      ),
+      threads
+    );
 
-      if (stats.isDirectory()) {
-        const repoGitDir = join(path, '.git');
-        const repoGitStats = await lstat(repoGitDir);
-
-        if (repoGitStats.isDirectory()) {
-          repositories.push(path);
-        }
-      } else if (stats.isFile()) {
-        files.push(path);
-      }
+    for (const batch of batches) {
+      await Promise.all(batch);
     }
 
-    for (const repoPath of repositories) {
-      await executeGitCommand(repoPath, [
-        'archive',
-        'HEAD',
-        '--format=tgz',
-        `--output=${join(outputPath, `${basename(repoPath)}.tgz`)}`
-      ]);
-    }
     console.log('Complete!');
   } catch (error) {
     console.error(error);
