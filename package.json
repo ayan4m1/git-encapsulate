@@ -57,7 +57,7 @@
   },
   "type": "module",
   "types": "lib/index.d.ts",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "dependencies": {
     "commander": "13.1.0",
     "glob": "11.0.1",
